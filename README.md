@@ -26,6 +26,7 @@ confirm.
 ## Contents
 
 - [Before you start](#before-you-start)
+- [Downloading the app](#downloading-the-app)
 - [Building the app](#building-the-app)
   - [Windows](#windows)
   - [macOS](#macos)
@@ -38,6 +39,7 @@ confirm.
 - [Finance Officer — Donations tab](#finance-officer--donations-tab)
 - [Finance Clerk — Weapon Passes tab](#finance-clerk--weapon-passes-tab)
 - [Command line](#command-line)
+- [Making a release](#making-a-release)
 - [For developers](#for-developers)
 
 ---
@@ -51,9 +53,52 @@ You need:
   second password.
 - **Permissions on the personnel site** for the job you do: *Finance Records*
   for the Finance Officer tab, *Passes* for the Finance Clerk tab.
-- **To build the app:** Python 3.10 or newer with Tkinter (the window library),
-  on the operating system you want to run the app on. Once it is built, the app
-  runs without Python.
+- **The app itself.** Most people download a ready-made app (see
+  [Downloading the app](#downloading-the-app)), which needs nothing else.
+  Building it yourself needs Python 3.10 or newer with Tkinter (the window
+  library), on the operating system you want to run the app on.
+
+---
+
+## Downloading the app
+
+Ready-made apps for Windows, Mac and Linux are on the
+[**Releases page**](https://github.com/OsakaDS/29th-Finance/releases). Download
+them **only from there**, never from a file someone sends you. GitHub builds
+every release from the code in this repository.
+
+| System | File | How to open it |
+|---|---|---|
+| Windows | `29th-Donations-Windows.zip` | Unzip it, then double-click `29th Donations.exe`. |
+| Mac (Apple chip, M1 or later) | `29th-Donations-macOS.zip` | Double-click the zip, then drag `29th Donations.app` to *Applications*. |
+| Linux | `29th-Donations-Linux.tar.gz` | Run `tar -xzf 29th-Donations-Linux.tar.gz`, then `"./29th Donations"`. |
+
+The apps aren't signed, so the first time you open one:
+
+- **Windows:** if SmartScreen warns about it, click **More info › Run anyway**.
+- **Mac:** if it says the app can't be opened, go to *System Settings › Privacy
+  & Security*, scroll down and click **Open Anyway** next to *29th Donations*.
+  On macOS 14 and earlier, right-clicking the app and choosing **Open** also
+  works.
+
+After that it opens normally.
+
+**Check your download (optional).** Each release lists a SHA-256 checksum for
+every file. Work out the checksum of the file you downloaded and compare it
+with the one on the release. If it doesn't match, don't open the file.
+
+- Windows (PowerShell):
+  ```bash
+  Get-FileHash 29th-Donations-Windows.zip -Algorithm SHA256
+  ```
+- Mac:
+  ```bash
+  shasum -a 256 29th-Donations-macOS.zip
+  ```
+- Linux:
+  ```bash
+  sha256sum 29th-Donations-Linux.tar.gz
+  ```
 
 ---
 
@@ -105,8 +150,8 @@ Put an `app.ico` next to `build_app.py` before building to give the app an icon.
    was found, install Python from
    [python.org](https://www.python.org/downloads/macos/) and run it again.
 2. The result is **`dist/29th Donations.app`**. Drag it to *Applications*.
-3. The app isn't signed, so the first time you open it, **right-click it and
-   choose Open**, then confirm. After that it opens normally.
+3. The app isn't signed. The first time you open it, allow it as described in
+   [Downloading the app](#downloading-the-app).
 
 Put an `app.icns` next to `build_app.py` before building to give the app an icon.
 
@@ -432,6 +477,32 @@ Leave out `--dry-run` to write for real. `donation_automation.py --topic-id
 
 ---
 
+## Making a release
+
+Releases are built automatically by GitHub Actions
+(`.github/workflows/release.yml`). Nobody needs to build the apps on their own
+computer, and nobody needs a Windows PC.
+
+1. Open the [Releases page](https://github.com/OsakaDS/29th-Finance/releases)
+   and click **Draft a new release**.
+2. Under **Choose a tag**, type the new version and click **Create new tag**.
+   Use `v1.0.1` for fixes and `v1.1.0` for new features. The target is `main`.
+3. Give it a title, and write what changed in the description.
+4. Click **Publish release**.
+
+GitHub then builds the Windows, Mac and Linux apps, which takes about 10
+minutes. It attaches them and `SHA256SUMS.txt` to the release, and adds the
+checksums and a link to the build log to the description. You can follow the
+build on the **Actions** tab. If a build fails, its log there shows why. Fix
+the problem, delete the release and its tag, and publish it again.
+
+**Test build without releasing:** on the **Actions** tab, open *Build and
+release* and click **Run workflow**. The three files appear under that run's
+*Artifacts* for 14 days. Nothing is published. Every pull request gets the same
+test build automatically, so check that its three builds pass before merging.
+
+---
+
 ## For developers
 
 | File | What it does |
@@ -442,6 +513,7 @@ Leave out `--dry-run` to write for real. `donation_automation.py --topic-id
 | `finance_clerk.py` | Finance Clerk logic: tiers, duplicates, passes, PMs, reply |
 | `build_app.py` | Builds the app with PyInstaller (Windows, macOS, Linux) |
 | `build_mac.sh` | One-step macOS build |
+| `.github/workflows/release.yml` | Builds all three apps on GitHub and attaches them to each release |
 | `requirements.txt` | Python packages: `requests`, `beautifulsoup4`, `pyinstaller` |
 
 - Each tab works in two phases: `prepare()` only reads and builds the preview,
