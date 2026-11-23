@@ -20,9 +20,7 @@ import threading
 import traceback
 import webbrowser
 
-from donation_automation import (CREDENTIALS_FILE, FORUM, AutomationError,
-                                 DonationAutomator, app_file, delete_credentials,
-                                 load_credentials, save_credentials)
+from donation_automation import FORUM, AutomationError, DonationAutomator, app_file
 
 
 def report_startup_error(message):
@@ -62,67 +60,6 @@ else:
     MONO, SIZE = "Consolas", 10
 
 
-class CredentialsDialog(tk.Toplevel):
-    """Modal sign-in prompt used when credentials.json is missing or bad."""
-
-    def __init__(self, parent, username=""):
-        super().__init__(parent)
-        self.title("Sign in — 29th ID forum account")
-        self.resizable(False, False)
-        self.result = None
-
-        frame = ttk.Frame(self, padding=PAD)
-        frame.grid(sticky="nsew")
-        frame.columnconfigure(1, weight=1)
-
-        ttk.Label(frame, text="Your forums.29th.org account is used to read the\n"
-                              "donations post and submit the records.",
-                  foreground="#555").grid(row=0, column=0, columnspan=2,
-                                          sticky="w", pady=(0, PAD))
-
-        ttk.Label(frame, text="Username:").grid(row=1, column=0, sticky="w")
-        self.user_var = tk.StringVar(value=username)
-        user_entry = ttk.Entry(frame, textvariable=self.user_var, width=32)
-        user_entry.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=2)
-
-        ttk.Label(frame, text="Password:").grid(row=2, column=0, sticky="w")
-        self.pass_var = tk.StringVar()
-        pass_entry = ttk.Entry(frame, textvariable=self.pass_var, show="•", width=32)
-        pass_entry.grid(row=2, column=1, sticky="ew", padx=(6, 0), pady=2)
-
-        self.save_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame, text=f"Remember me (saves {CREDENTIALS_FILE} "
-                                    f"next to the app)",
-                        variable=self.save_var).grid(row=3, column=0, columnspan=2,
-                                                     sticky="w", pady=(PAD, 0))
-
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=4, column=0, columnspan=2, sticky="e", pady=(PAD, 0))
-        ttk.Button(buttons, text="Cancel", command=self.destroy).grid(row=0, column=0)
-        ttk.Button(buttons, text="Sign in", command=self._accept).grid(
-            row=0, column=1, padx=(6, 0))
-
-        self.bind("<Return>", lambda _e: self._accept())
-        self.bind("<Escape>", lambda _e: self.destroy())
-        (pass_entry if username else user_entry).focus_set()
-
-        self.transient(parent)
-        self.grab_set()
-        self.update_idletasks()
-        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-
-    def _accept(self):
-        user, password = self.user_var.get().strip(), self.pass_var.get()
-        if not user or not password:
-            messagebox.showwarning("Sign in", "Enter both a username and password.",
-                                   parent=self)
-            return
-        self.result = (user, password, self.save_var.get())
-        self.destroy()
-
-
 class DonationGUI:
     def __init__(self, root, parent=None):
         self.root = root
@@ -133,13 +70,10 @@ class DonationGUI:
         self.busy = False
         self.messages = queue.Queue()
         self.results = queue.Queue()  # callbacks from the worker thread
-
-        root.title("29th ID — Finance Officer")
-        root.geometry("1000x820")
-        root.minsize(760, 620)
+        # Set by the login screen (login_gui.AppShell) once the forum accepts them.
+        self.username = self.password = None
 
         self._build_widgets()
-        self._load_credentials()
         self.root.after(100, self._drain_messages)
 
     # --------------------------------------------------------------- layout
@@ -234,16 +168,6 @@ class DonationGUI:
                                    command=self.on_open_topic, state="disabled")
         self.open_btn.grid(row=0, column=3, padx=(10, 0))
 
-        # Account buttons sit on the second row, in their own frame, so they
-        # never get squeezed out of view on a narrow window.
-        account = ttk.Frame(actions)
-        account.grid(row=1, column=4, columnspan=3, sticky="e", pady=(6, 0))
-        self.signin_btn = ttk.Button(account, text="Sign in…", command=self.on_sign_in)
-        self.signin_btn.grid(row=0, column=0)
-        self.signout_btn = ttk.Button(account, text="Delete credentials",
-                                      command=self.on_delete_credentials)
-        self.signout_btn.grid(row=0, column=1, padx=(6, 0))
-
         self.progress = ttk.Progressbar(actions, mode="indeterminate", length=160)
         self.progress.grid(row=0, column=6, padx=(10, 0), sticky="e")
 
@@ -271,74 +195,29 @@ class DonationGUI:
                   anchor="w", padding=(6, 3)).grid(row=5, column=0, sticky="ew",
                                                    padx=PAD, pady=(6, PAD))
 
-    # ----------------------------------------------------------- credentials
+    # --------------------------------------------------------------- account
 
-    def _load_credentials(self):
-        """Load saved credentials, or prompt for them on first run."""
-        self.username = self.password = None
-        try:
-            self.username, self.password = load_credentials()
-            self.log(f"Signed in as '{self.username}'.")
-            self.status_var.set(f"Ready — signed in as {self.username}.")
-            self._refresh_signin_ui()
-            return
-        except FileNotFoundError:
-            self.log("No saved credentials — please sign in.")
-        except (KeyError, ValueError) as e:
-            self.log(f"{CREDENTIALS_FILE} is unreadable ({e}) — please sign in.", "warn")
-        self.root.after(200, self.on_sign_in)
-
-    def on_sign_in(self):
-        dialog = CredentialsDialog(self.root, username=self.username or "")
-        self.root.wait_window(dialog)
-        if not dialog.result:
-            if not self.username:
-                self.status_var.set("Not signed in — click 'Sign in' to continue.")
-                self.preview_btn.state(["disabled"])
-            return
-        self.username, self.password, remember = dialog.result
-        if remember:
-            try:
-                path = save_credentials(self.username, self.password)
-                self.log(f"Credentials saved to {path}")
-            except OSError as e:
-                self.log(f"Could not save credentials: {e}", "warn")
-        self.log(f"Signed in as '{self.username}'.")
-        self.status_var.set(f"Ready — signed in as {self.username}.")
-        self.preview_btn.state(["!disabled"])
-        self._refresh_signin_ui()
-
-    def _refresh_signin_ui(self):
-        if self.username:
-            self.signin_btn.configure(text=f"Sign in as… ({self.username})")
-        else:
-            self.signin_btn.configure(text="Sign in…")
-
-    def on_delete_credentials(self):
-        """Forget the signed-in account and delete credentials.json."""
-        if self.busy:
-            return
-        if not messagebox.askyesno(
-                "Delete credentials",
-                f"Delete the saved credentials ({CREDENTIALS_FILE}) and sign out?\n\n"
-                "You will need to sign in again before loading a post.",
-                parent=self.root):
-            return
-        try:
-            existed = delete_credentials()
-        except OSError as e:
-            self.log(f"Could not delete credentials: {e}", "error")
-            messagebox.showerror("Delete credentials", str(e), parent=self.root)
-            return
-        self.username = self.password = None
+    def set_account(self, username, password):
+        """Called by the login screen on sign-in (and with None on sign-out).
+        Starts the tab afresh so nothing loaded by another account is kept."""
+        self.username, self.password = username, password
         self.bot = None
         self.plan = None
+        self.created_topic_url = None
+        self.title_var.set("")
+        self.preview_text.delete("1.0", "end")
+        self.summary_var.set(
+            "No post loaded yet — paste the donations post link above "
+            "(or leave it blank for the latest) and click Load preview.")
         self.submit_btn.state(["disabled"])
-        self.preview_btn.state(["disabled"])
-        self._refresh_signin_ui()
-        self.log("Saved credentials deleted." if existed
-                 else "No saved credentials file; signed out.")
-        self.status_var.set("Signed out — click 'Sign in' to continue.")
+        self.submit_hint.set("← load a preview first")
+        self.open_btn.state(["disabled"])
+        if username:
+            self.log(f"Signed in as '{username}'.", "ok")
+            self.status_var.set(f"Ready — signed in as {username}.")
+        else:
+            self.log("Signed out.")
+            self.status_var.set("Signed out.")
 
     # ------------------------------------------------------------- threading
 
@@ -420,8 +299,6 @@ class DonationGUI:
         state = "!disabled" if enabled else "disabled"
         self.preview_btn.state([state])
         self.url_entry.state([state])
-        self.signin_btn.state([state])
-        self.signout_btn.state([state])
         # Submit stays disabled until there is a plan to submit.
         if enabled and self.plan:
             self.submit_btn.state(["!disabled"])
@@ -438,9 +315,7 @@ class DonationGUI:
         if self.busy:
             return
         if not self.username or not self.password:
-            self.on_sign_in()
-            if not self.username:
-                return
+            return  # the login screen keeps the tabs hidden until signed in
         url = self.url_var.get().strip() or None
         self.plan = None
         self.open_btn.state(["disabled"])
@@ -551,16 +426,9 @@ def run():
         root.call("source", "sun-valley.tcl")  # optional nicer theme if present
     except tk.TclError:
         pass
-    from finance_clerk_gui import FinanceClerkTab
+    from login_gui import AppShell
 
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill="both", expand=True)
-    donations = ttk.Frame(notebook)
-    clerk = ttk.Frame(notebook)
-    notebook.add(donations, text="Donations")
-    notebook.add(clerk, text="Finance Clerk — Weapon Passes")
-    app = DonationGUI(root, donations)
-    FinanceClerkTab(root, clerk, app)
+    AppShell(root)  # login screen first; the tabs appear once signed in
     root.mainloop()
 
 
