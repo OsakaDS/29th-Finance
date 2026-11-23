@@ -1,0 +1,125 @@
+# Builds the app for Windows, macOS and Linux on GitHub's own machines.
+#
+# - Publish a release (Releases > Draft a new release > Publish): the three
+#   builds and SHA256SUMS.txt are attached to it, and the checksums are added
+#   to its description.
+# - Actions > "Build and release" > Run workflow: a test build. The files are
+#   kept for 14 days under that run's "Artifacts"; nothing is published.
+# - Every pull request to main gets the same test build, so a change that
+#   breaks a build shows up before it is merged.
+name: Build and release
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to attach files to the release
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            asset: 29th-Donations-Windows.zip
+          - name: macOS (Apple chip)
+            os: macos-latest
+            asset: 29th-Donations-macOS.zip
+          - name: Linux
+            # The oldest supported Ubuntu, so the build runs on more Linux versions.
+            os: ubuntu-22.04
+            asset: 29th-Donations-Linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (Windows, macOS)
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Python with Tkinter (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-venv
+          python3 -m venv .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Build
+        run: python build_app.py
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/29th Donations.exe" -DestinationPath "${{ matrix.asset }}"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent "dist/29th Donations.app" "${{ matrix.asset }}"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf "${{ matrix.asset }}" -C dist "29th Donations"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Attach to the release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: files
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload files and add checksums to the description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" files/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
+          {
+            echo
+            echo "### Downloads"
+            echo
+            echo "- **Windows:** 29th-Donations-Windows.zip"
+            echo "- **Mac (Apple chip, M1 or later):** 29th-Donations-macOS.zip"
+            echo "- **Linux:** 29th-Donations-Linux.tar.gz"
+            echo
+            echo "Built by GitHub Actions from the code in this release ([build log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID))."
+            echo
+            echo "### SHA-256 checksums"
+            echo
+            echo '```'
+            cat files/SHA256SUMS.txt
+            echo '```'
+          } >> notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
