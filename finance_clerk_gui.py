@@ -1,9 +1,9 @@
 """
 29th Infantry Division - Finance Clerk tab (weapon passes)
 ==========================================================
-Second tab of the Finance Officer app. Shares the signed-in account with the
-Donations tab; keeps its own activity log, dry-run switch and audit file
-(finance_clerk_automation_results.json).
+Second tab of the app. Uses the account signed in on the login screen
+(login_gui.py), like the Donations tab; keeps its own activity log, dry-run
+switch and audit file (finance_clerk_automation_results.json).
 """
 
 import queue
@@ -333,9 +333,7 @@ class FinanceClerkTab:
         if self.busy:
             return
         if not self.app.username or not self.app.password:
-            self.app.on_sign_in()
-            if not self.app.username:
-                return
+            return  # the login screen keeps the tabs hidden until signed in
         url = self.url_var.get().strip() or None
         settings = dict(self._settings_from_ui())
         week = self.week_var.get()
@@ -347,6 +345,20 @@ class FinanceClerkTab:
                                   dry_run=self.dry_var.get(), log=self.log)
         self._run_async(lambda: self.clerk.prepare(url, week=week, settings=settings),
                         self._show_preview)
+
+    def reset(self):
+        """Start afresh after a sign-in or sign-out, so nothing loaded by
+        another account is kept."""
+        self.clerk = None
+        self.plan = None
+        self.tree.delete(*self.tree.get_children())
+        self.out_text.configure(state="normal")
+        self.out_text.delete("1.0", "end")
+        self.out_text.configure(state="disabled")
+        self.summary_var.set(
+            "No post loaded yet — paste the donations post link and click Load preview.")
+        self.submit_btn.state(["disabled"])
+        self.status_var.set("Ready.")
 
     def _show_preview(self, plan):
         self.plan = plan

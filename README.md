@@ -196,13 +196,17 @@ On a Mac, once `./build_mac.sh` has run, use `.venv/bin/python donation_gui.py`.
 The app uses your **forums.29th.org username and password**. Both tabs share
 the same sign-in.
 
-- **First launch:** the app asks for your username and password. Tick
-  **Remember me** to save them in `credentials.json`, so you only sign in once.
-  Leave it unticked to sign in again every time you start the app.
-- **Switch account:** click **Sign in…** on the Donations tab (it shows *Sign in
-  as… (name)* once you have signed in) and enter the other account.
-- **Sign out:** click **Delete credentials**. This deletes `credentials.json`
-  and signs you out.
+- **The login screen:** the app opens on a login box, and the tabs stay hidden
+  until you sign in. The app checks your username and password with the forum
+  itself, so a wrong password is caught straight away and the box says why.
+- **Remember me:** ticked, your login is saved in `credentials.json`, and the
+  next time you open the app it signs you in automatically. If the saved login
+  no longer works (for example, after a password change), the login box opens
+  with the error. Unticked, nothing is saved and you sign in every time.
+- **Sign out:** the bar above the tabs shows *Signed in as …* and a **Sign
+  out** button. Signing out clears both tabs, deletes the saved login and
+  returns to the login box, so someone else can sign in with their own
+  account. You can't sign out while a tab is still working.
 - **Command line:** the scripts read the same file. You can also create it by
   hand:
   ```json
@@ -217,8 +221,8 @@ Keep your credentials safe:
   computer. Each person signs in with their own account.
 - `credentials.json` is listed in `.gitignore`, so it is never committed. Never
   remove it from that list.
-- If your password may have leaked, change it on the forum and click **Delete
-  credentials** in the app.
+- If your password may have leaked, change it on the forum and click **Sign
+  out** in the app.
 
 ---
 
@@ -273,7 +277,8 @@ had no Tkinter. Install Python with Tkinter as described in
 
 | Message | What to do |
 |---|---|
-| *Forum login failed* | Check the username and password. The app uses your normal forum login. Click **Sign in…** to enter them again. |
+| *Forum login failed* (on the login box) | Check the username and password. The app uses your normal forum login. |
+| *Could not reach forums.29th.org* | Check your internet connection and try again. |
 | *Site login failed … may lack the permissions* | Your account can't open the Finance Records page (Finance Officer tab) or the New Pass page (Finance Clerk tab). Ask for the permission. |
 | *Could not open topic* | Check the link, and check that your account can read that category. |
 | *No donations or expenses could be read* | The link doesn't point at a donations topic with a table. |
@@ -507,7 +512,8 @@ test build automatically, so check that its three builds pass before merging.
 
 | File | What it does |
 |---|---|
-| `donation_gui.py` | The window: the tabs, sign-in and the Donations tab |
+| `donation_gui.py` | Starts the app; the Donations tab |
+| `login_gui.py` | The login screen, the account bar with **Sign out**, and the tabs around them |
 | `donation_automation.py` | Finance Officer logic: login, reading posts and profiles, posting, finance records |
 | `finance_clerk_gui.py` | The Finance Clerk tab |
 | `finance_clerk.py` | Finance Clerk logic: tiers, duplicates, passes, PMs, reply |
