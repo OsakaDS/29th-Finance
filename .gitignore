@@ -1,0 +1,16 @@
+credentials.json
+automation_results.json
+.venv/
+startup-error.log
+
+.DS_Store
+__pycache__/
+.29env/
+finance_clerk_automation_results.json
+finance_clerk_settings.json
+passes_list_debug.html
+
+# Build output (recreated by build_app.py; contains local paths)
+build/
+dist/
+*.spec
